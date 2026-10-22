@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "version": "v1",
-  "download_base_url": "https://ftp.cptec.inpe.br/rainfall/ainpp-pb-latam/checkpoints/inceptionv4/v1/",
+  "download_base_url": "https://ainpp-pb-latam-nowcasting-checkpoints.s3.us-east-2.amazonaws.com/",
   "model": "InceptionV4",
   "architecture": {
     "encoder": "inception_v4",
@@ -17,7 +17,7 @@
     "sha256": "b4ea8f8c9f22063b9239f77aaba6e01b6474eeafc14fe98e099aca4729c329c3"
   },
   "training_args": {
-    "zarr_path": "/prj/ideeps/adriano.almeida/data/ainpp/legacy/gsmap_nrt+mvk_log_zscore_ainpp-latin-america.zarr",
+    "zarr_path": "",
     "region": "ainpp-latin-america",
     "patch_size": 320,
     "patch_stride": 160,
