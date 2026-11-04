@@ -8,6 +8,19 @@ expensive later.
 
 Arrays cross these boundaries as NumPy, never as the tensor type of a particular
 deep learning framework. Tensor handling belongs inside a model.
+
+The spine every run follows, where bracketed stages may be empty:
+
+    Source -> Decoder -> [Preprocess] -> Transform.forward -> Predictor
+           -> Transform.inverse -> [Postprocess] -> Sink
+
+Stage order is load bearing, so it is fixed rather than left to a composition:
+configured stages run first on input and last on output, model stages run last
+on input and first on output. A configured step therefore always sees physical
+units as the provider published them, and a model step always sees them as its
+checkpoint expects. Reversing the output restores the input ordering, so a pair
+such as flipping latitude composes correctly without either side knowing about
+the other.
 """
 
 from __future__ import annotations
@@ -171,19 +184,26 @@ class Frame:
 
 @dataclass(frozen=True)
 class Prediction:
-    """One lead, still in the model space; the runtime applies the inverse.
+    """One lead, with the mask it inherited from its inputs.
 
     values has shape (members, variables, height, width). Both leading axes are
     length one for a deterministic, single-variable model and are not squeezed.
+    Carrying the mask here keeps a Prediction self-contained, so a postprocess
+    step and a sink both receive everything they need from one object.
     """
 
     values: np.ndarray
+    missing: np.ndarray
     lead: int
     valid_time: datetime
 
     def __post_init__(self):
         if self.values.ndim != 4:
             raise ValueError("Prediction values must be (members, variables, height, width)")
+        if self.missing.shape != self.values.shape:
+            raise ValueError("Prediction mask must match its values")
+        if self.missing.dtype != np.bool_:
+            raise ValueError("Prediction mask must be boolean")
         if self.lead < 1:
             raise ValueError("Lead index starts at one")
 
@@ -249,12 +269,45 @@ class Decoder(Protocol):
 
 
 @runtime_checkable
+class Preprocess(Protocol):
+    """One step applied to a decoded Frame, in physical units.
+
+    Runs before the transform. A deployment may declare none, which is the
+    default: the absence of preprocessing is an ordinary configuration, not a
+    special case.
+    """
+
+    def apply(self, frame: Frame) -> Frame:
+        """Return a Frame on the same grid, at the same time."""
+
+    def describe(self) -> Mapping[str, object]:
+        """Parameters to record in the run manifest."""
+
+
+@runtime_checkable
+class Postprocess(Protocol):
+    """One step applied to a Prediction, in physical units.
+
+    Runs after the inverse transform, so a step sees real units rather than
+    model space. A deployment may declare none.
+    """
+
+    def apply(self, prediction: Prediction) -> Prediction:
+        """Return a Prediction for the same lead and valid time."""
+
+    def describe(self) -> Mapping[str, object]:
+        """Parameters to record in the run manifest."""
+
+
+@runtime_checkable
 class Transform(Protocol):
     """A model input scaling, inseparable from its checkpoint.
 
-    Bound by the plugin and never by configuration: the statistics live in the
-    artifact bundle, so a configurable transform would admit a silent mismatch
-    that still produces plausible output (ADR 0001).
+    Optional: a model that consumes physical units declares no transform and the
+    runtime applies identity. When one exists, the plugin binds it and
+    configuration cannot override it, because the statistics live in the artifact
+    bundle and a mismatch would raise nothing while producing plausible but
+    meaningless output (ADR 0001, ADR 0004).
     """
 
     def forward(self, values: np.ndarray) -> np.ndarray:
@@ -309,22 +362,30 @@ class Sink(Protocol):
     def write(
         self,
         path: Path,
-        values: np.ndarray,
-        missing: np.ndarray,
+        prediction: Prediction,
+        member: int,
         grid: Grid,
         units: str,
         tags: Mapping[str, object],
     ) -> None:
-        """Write one two-dimensional field into a staging directory."""
+        """Write one member of one lead into a staging directory."""
 
 
 @dataclass(frozen=True)
 class ModelPlugin:
     """Everything the runtime needs from a model, and nothing more.
 
+    Only the first six fields are required. A model that consumes physical units
+    and needs no model-side stages declares nothing further, because the absence
+    of pre and post processing is the default path rather than a special case
+    (ADR 0004).
+
     bundle_roles is declared rather than fixed, so a model with no normalization
     statistics, or one with auxiliary static fields, is expressible without
     changing the manifest reader.
+
+    The optional factories receive the verified artifact paths, so a model-side
+    stage may be parameterized by its own bundle.
     """
 
     name: str
@@ -333,8 +394,10 @@ class ModelPlugin:
     bundle_roles: tuple[str, ...]
     requires_runtime: str
     load: Callable[[Mapping[str, Path], str, Grid], Predictor]
-    transform: Callable[[Mapping[str, Path]], Transform]
-    library_versions: Callable[[], Mapping[str, str]]
+    transform: Callable[[Mapping[str, Path]], Transform] | None = None
+    preprocess: Callable[[Mapping[str, Path]], Sequence[Preprocess]] | None = None
+    postprocess: Callable[[Mapping[str, Path]], Sequence[Postprocess]] | None = None
+    library_versions: Callable[[], Mapping[str, str]] = dict
 
     def __post_init__(self):
         if not self.name or not self.version or not self.requires_runtime:

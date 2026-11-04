@@ -9,8 +9,10 @@ from nowcast_runtime.ports import (
     Frame,
     Grid,
     ModelPlugin,
+    Postprocess,
     Prediction,
     Predictor,
+    Preprocess,
     WindowSpec,
 )
 
@@ -147,24 +149,30 @@ def test_frame_rejects_inconsistent_payloads(values, missing, units, message):
         Frame(values, missing, units, grid, datetime(2000, 1, 1, tzinfo=UTC))
 
 
-def test_prediction_keeps_member_and_variable_axes():
+def test_prediction_keeps_member_and_variable_axes_and_carries_its_mask():
     prediction = Prediction(
-        np.zeros((1, 1, 3, 4), dtype=np.float32), 1, datetime(2000, 1, 1, tzinfo=UTC)
+        np.zeros((1, 1, 3, 4), dtype=np.float32),
+        np.zeros((1, 1, 3, 4), dtype=bool),
+        1,
+        datetime(2000, 1, 1, tzinfo=UTC),
     )
     assert prediction.members == 1
     assert prediction.values.ndim == 4
+    assert prediction.missing.shape == prediction.values.shape
 
 
 @pytest.mark.parametrize(
-    ("values", "lead", "message"),
+    ("values", "missing", "lead", "message"),
     [
-        (np.zeros((1, 3, 4)), 1, "members, variables, height, width"),
-        (np.zeros((1, 1, 3, 4)), 0, "starts at one"),
+        (np.zeros((1, 3, 4)), np.zeros((1, 3, 4), bool), 1, "members, variables, height, width"),
+        (np.zeros((1, 1, 3, 4)), np.zeros((1, 1, 3, 5), bool), 1, "mask must match"),
+        (np.zeros((1, 1, 3, 4)), np.zeros((1, 1, 3, 4)), 1, "mask must be boolean"),
+        (np.zeros((1, 1, 3, 4)), np.zeros((1, 1, 3, 4), bool), 0, "starts at one"),
     ],
 )
-def test_prediction_rejects_invalid_payloads(values, lead, message):
+def test_prediction_rejects_invalid_payloads(values, missing, lead, message):
     with pytest.raises(ValueError, match=message):
-        Prediction(values, lead, datetime(2000, 1, 1, tzinfo=UTC))
+        Prediction(values, missing, lead, datetime(2000, 1, 1, tzinfo=UTC))
 
 
 def plugin(**overrides):
@@ -175,10 +183,16 @@ def plugin(**overrides):
         "bundle_roles": ("checkpoint",),
         "requires_runtime": ">=0.2,<0.3",
         "load": lambda artifacts, device, grid: None,
-        "transform": lambda artifacts: None,
-        "library_versions": dict,
     }
     return ModelPlugin(**{**base, **overrides})
+
+
+def test_a_plugin_needs_no_transform_and_no_stages():
+    minimal = plugin()
+    assert minimal.transform is None
+    assert minimal.preprocess is None
+    assert minimal.postprocess is None
+    assert minimal.library_versions() == {}
 
 
 def test_plugin_declares_its_own_bundle_roles():
@@ -218,3 +232,16 @@ def test_predictor_protocol_recognizes_a_minimal_implementation():
 
     assert isinstance(Direct(), Predictor)
     assert not isinstance(object(), Predictor)
+
+
+def test_stage_protocols_recognize_a_plain_object():
+    class FlipLatitude:
+        def apply(self, payload):
+            return payload
+
+        def describe(self):
+            return {"axis": "latitude"}
+
+    assert isinstance(FlipLatitude(), Preprocess)
+    assert isinstance(FlipLatitude(), Postprocess)
+    assert not isinstance(object(), Preprocess)

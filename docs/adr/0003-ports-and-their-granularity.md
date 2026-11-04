@@ -1,6 +1,6 @@
 # 0003 — The ports, and how many of them there are
 
-Status: Accepted
+Status: Accepted, amended by [ADR 0004](0004-optional-stages-and-built-in-adapters.md)
 Date: 2026-11-04
 
 ## Context
