@@ -27,11 +27,19 @@ can coexist without either dictating the other's torch build
 ## Current state
 
 The runtime has been extracted from the InceptionV4 package and is consumed as a
-real dependency, so a fix lands in one place. **The abstraction work is not
-done**: acquisition, decoding, normalization, and export are still written
-against GSMaP binaries, JAXA FTP, a log1p/z-score transform, and single-band
-GeoTIFF. Those become explicit ports in the phases that follow. Read the runtime
-today as "shared code", not yet as "a stable plugin contract".
+real dependency, so a fix lands in one place.
+
+`nowcast_runtime.ports` now defines the contracts a deployment composes: five
+ports, the value objects they exchange, and the plugin declaration a model
+supplies. See [ADR 0003](docs/adr/0003-ports-and-their-granularity.md) for which
+seams are justified and why there are not more of them.
+
+**The pipeline has not been migrated onto those ports yet.** Acquisition,
+decoding, normalization and export still read GSMaP binaries from JAXA FTP
+through a log1p/z-score transform into single-band GeoTIFF, written directly
+rather than through the contracts. Until that migration lands, read `ports.py`
+as the target and the remaining modules as an implementation that does not yet
+satisfy it.
 
 ## Checks
 
@@ -54,9 +62,12 @@ and model, so lint rules cannot drift between them.
 
 ## Adding a model
 
-Until the ports land, a new model supplies a `Backend` — a name, a version, a
-function that loads a checkpoint, and a function that yields normalized leads —
-plus its configuration and a SHA-256 artifact manifest. See
-`models/inceptionv4/src/inceptionv4_nowcast/entrypoint.py`, which is the whole
-wiring, and `packages/nowcast-runtime/src/nowcast_runtime/backend.py` for the
-contract it satisfies.
+What a model will supply is a `ModelPlugin`: its name and version, the artifact
+roles its bundle contains, the runtime range it needs, and callables that build
+its `Predictor` and `Transform`. That declaration lives in `ports.py`.
+
+What a model supplies *today*, until the migration lands, is the narrower
+`Backend` in `backend.py` — a name, a version, a checkpoint loader and a
+function yielding normalized leads — plus its configuration and a SHA-256
+artifact manifest. `models/inceptionv4/src/inceptionv4_nowcast/entrypoint.py` is
+the whole wiring, and is worth reading first.
