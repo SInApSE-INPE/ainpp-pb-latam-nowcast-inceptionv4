@@ -1,0 +1,15 @@
+services:
+  inceptionv4:
+    build:
+      # The runtime package lives outside this directory, so the context is the
+      # workspace root and the Dockerfile path is relative to it.
+      context: ../..
+      dockerfile: models/inceptionv4/Dockerfile
+    image: inceptionv4-nowcast:local
+    restart: unless-stopped
+    stop_grace_period: 20m
+    # user: "${INCEPTIONV4_UID:?Set INCEPTIONV4_UID to your host user ID}:${INCEPTIONV4_GID:?Set INCEPTIONV4_GID to your host group ID}"
+    env_file: .env
+    volumes:
+      - ./artifacts/v1:/app/artifacts/v1
+      - ./outputs:/app/outputs

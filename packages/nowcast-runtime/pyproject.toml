@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nowcast-runtime"
+version = "0.2.0"
+description = "Operational runtime for scheduled, auditable gridded nowcast publication"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "numpy>=1.26,<3",
+    "rasterio>=1.4,<2",
+    "torch>=2.5",
+]
+
+[project.scripts]
+nowcast-download-artifacts = "nowcast_runtime.download_artifacts:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nowcast_runtime"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

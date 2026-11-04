@@ -36,5 +36,5 @@ runs/
 # Secrets and local deployment files
 .env
 .env.*
-deploy/generated/
+**/deploy/generated/
 *.log
