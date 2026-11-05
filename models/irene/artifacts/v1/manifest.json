@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "version": "v1",
+  "model": "IRENE",
+  "architecture": {
+    "class": "EncoderDecoder",
+    "input_channels": 1,
+    "num_blocks": 5,
+    "forecast_steps": 12,
+    "ensemble_size": 10,
+    "noisy_decoder": true
+  },
+  "source": {
+    "url": "https://huggingface.co/it4lia/irene",
+    "name": "model.ckpt",
+    "sha256": "58df5c2d43e131b632ec9cf41e66465b7c7167202a851a4aaa84951308f74699",
+    "license": "BSD-2-Clause"
+  },
+  "output_floor_mm_h": 0.036463,
+  "files": {
+    "weights": {
+      "name": "irene.pt",
+      "sha256": "42237594e4641f6b047fdad380545b1225fde34ad29a682ecc69d4584bff43e8"
+    }
+  }
+}

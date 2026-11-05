@@ -1,0 +1,22 @@
+{
+  "artifacts": "../artifacts/v1",
+  "domain": {
+    "west": -200000.0,
+    "south": 0.0,
+    "east": 56000.0,
+    "north": 256000.0
+  },
+  "model_latitude_order": "north_to_south",
+  "product": "dpc_sri",
+  "remote_directory": "/unused-local-only",
+  "missing_policy": "zero_rain",
+  "max_missing_fraction": 0.95,
+  "ftp": {
+    "timeout_seconds": 60,
+    "attempts": 3,
+    "retry_delay_seconds": 30,
+    "max_retry_delay_seconds": 120
+  },
+  "ensemble_members": 4,
+  "seed": 20260101
+}

@@ -47,6 +47,7 @@ tutorials/02-a-new-data-source
 tutorials/03-ensembles-and-variables
 tutorials/04-running-in-a-container
 tutorials/05-scheduling-and-operations
+tutorials/06-porting-a-published-model
 ```
 
 ```{toctree}

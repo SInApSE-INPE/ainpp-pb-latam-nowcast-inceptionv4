@@ -1,0 +1,14 @@
+services:
+  irene:
+    build:
+      # The runtime lives outside this directory, so the context is the
+      # workspace root and the Dockerfile path is relative to it.
+      context: ../..
+      dockerfile: models/irene/Dockerfile
+    image: irene-nowcast:local
+    restart: unless-stopped
+    stop_grace_period: 20m
+    env_file: .env
+    volumes:
+      - ./artifacts/v1:/app/artifacts/v1
+      - ./outputs:/app/outputs

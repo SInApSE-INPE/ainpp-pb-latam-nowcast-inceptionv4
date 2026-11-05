@@ -23,6 +23,9 @@ docs = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# Vendored third-party source is kept byte-identical to upstream so it can
+# still be diffed against it. Reformatting it would make that impossible.
+extend-exclude = ["**/_vendor/**"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

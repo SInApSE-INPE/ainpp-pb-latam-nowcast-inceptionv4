@@ -149,19 +149,40 @@ class ConformanceSuite:
         Testing the raw field instead would be testing the wrong contract. A
         provider sentinel is still raw at that point, and a transform is never
         asked to survive one.
+
+        A transform may be lossy. A reflectivity scale saturates at both ends,
+        so its inverse is a left inverse only between them, and a round trip
+        outside that range is a physical property rather than a defect. Such a
+        transform says so with `representable_minimum` and
+        `representable_maximum`, and the check narrows to what it claims.
         """
-        staged = self.staged_frame(deployment, loaded)
-        restored = loaded.transform.inverse(loaded.transform.forward(staged.values))
-        np.testing.assert_allclose(restored, staged.values, rtol=1e-4, atol=1e-4)
+        transform = loaded.transform
+        values = self.staged_frame(deployment, loaded).values
+        low = getattr(transform, "representable_minimum", None)
+        high = getattr(transform, "representable_maximum", None)
+        if low is not None or high is not None:
+            values = np.clip(
+                values,
+                -np.inf if low is None else low,
+                np.inf if high is None else high,
+            )
+        restored = transform.inverse(transform.forward(values))
+        np.testing.assert_allclose(restored, values, rtol=1e-4, atol=1e-4)
 
     def test_the_transform_describes_itself_for_the_manifest(self, loaded):
         _json_safe(dict(loaded.transform.describe()), "Transform.describe()")
 
     def raw_frame(self, deployment) -> Frame:
+        """A frame shaped exactly as a decoder would hand one over.
+
+        The mask is derived from the values rather than assumed empty. Assuming
+        it produced a frame no decoder could ever emit, with gaps in the values
+        and nothing in the mask, and a gap-filling stage then failed on it.
+        """
         values = self.field(0, deployment.grid.shape)[np.newaxis]
         return Frame(
             values,
-            np.zeros_like(values, dtype=bool),
+            ~np.isfinite(values),
             deployment.units,
             deployment.grid,
             self.run_time,

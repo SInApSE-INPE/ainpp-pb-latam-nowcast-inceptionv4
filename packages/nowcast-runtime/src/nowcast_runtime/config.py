@@ -1,5 +1,9 @@
 """Validated configuration; all paths are relative to the configuration file.
 
+A deployment is described by one file. The runtime validates the fields it owns
+and carries the rest through in `extra`, so a model keeps its own settings
+beside them rather than in a second file that can drift out of step.
+
 The schema is still close to one deployment's shape rather than fully
 declarative: selecting a source or decoder by name belongs with the registry,
 and until then a model's composition root reads these fields. What has gone is
@@ -11,8 +15,10 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field, fields
 from pathlib import Path
+from typing import Any
 
 from .builtin.sources import RetryPolicy
 from .builtin.stages import POLICIES
@@ -70,6 +76,10 @@ class Config:
     missing_policy: str
     max_missing_fraction: float
     ftp: RetryPolicy
+    # Keys this runtime does not own, kept so a model can hold its own settings
+    # in the same file. Without it any extra key was a TypeError, which forced a
+    # second configuration file per deployment and two things to keep in step.
+    extra: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         if self.model_latitude_order not in LATITUDE_ORDERS:
@@ -87,4 +97,8 @@ class Config:
         payload["artifacts"] = (path.resolve().parent / payload["artifacts"]).resolve()
         payload["domain"] = Bounds(**payload["domain"])
         payload["ftp"] = RetryPolicy(**payload["ftp"])
-        return cls(**payload)
+        owned = {item.name for item in fields(cls)} - {"extra"}
+        return cls(
+            **{key: value for key, value in payload.items() if key in owned},
+            extra={key: value for key, value in payload.items() if key not in owned},
+        )

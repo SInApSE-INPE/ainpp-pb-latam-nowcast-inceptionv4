@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "irene-nowcast"
+version = "0.1.0"
+description = "IRENE operational nowcasting"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "nowcast-runtime>=0.3,<0.4",
+    "numpy>=1.26,<3",
+    "rasterio>=1.4,<2",
+    # NetCDF4 is HDF5 underneath, so h5py reads it without the netCDF C library.
+    "h5py>=3.11,<4",
+    "torch>=2.5",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[project.scripts]
+irene-nowcast = "irene_nowcast.entrypoint:main"
+irene-serve = "irene_nowcast.entrypoint:serve"
+irene-download-artifacts = "nowcast_runtime.download_artifacts:main"
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+nowcast-runtime = { path = "../../packages/nowcast-runtime", editable = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/irene_nowcast"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

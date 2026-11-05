@@ -327,6 +327,14 @@ class Transform(Protocol):
     def describe(self) -> Mapping[str, object]:
         """Parameters to record in the run manifest."""
 
+    # Optional. A transform that saturates is a left inverse only between these
+    # bounds, and declaring them is how a conformance round trip knows what to
+    # check. A reflectivity scale clipped to 0-60 dBZ cannot represent a rain
+    # rate below about 0.0365 mm/h, so every dry pixel comes back as drizzle
+    # unless a postprocess step puts it down again.
+    representable_minimum: float
+    representable_maximum: float
+
 
 @runtime_checkable
 class Predictor(Protocol):
