@@ -8,6 +8,13 @@ exclude = ["models/*"]
 
 [dependency-groups]
 dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+docs = [
+    "sphinx>=8,<9",
+    "sphinx-rtd-theme>=3,<4",
+    "myst-parser>=4,<5",
+    "sphinx-copybutton>=0.5,<1",
+    "matplotlib>=3.8,<4",
+]
 
 # No torch index here: the runtime depends on no framework, so each model
 # declares its own build in its own project.

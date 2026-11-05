@@ -1,0 +1,82 @@
+name: Documentation
+
+# Deploys to GitHub Pages. While the platform work lives on develop, that
+# branch publishes too, so the site can be reviewed before anything reaches
+# main. Remove develop from the push trigger once main is the source of truth.
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "docs/**"
+      - "packages/**"
+      - "pyproject.toml"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "packages/**"
+  workflow_dispatch:
+
+# Read-only by default; the deploy job asks for exactly what Pages needs.
+permissions:
+  contents: read
+
+# One deployment at a time, and never cancel one in flight: a half-finished
+# deploy would leave the site in an inconsistent state.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.32"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install the runtime and the documentation toolchain
+        run: uv sync --group docs
+
+      - name: Build the documentation
+        # Warnings are failures: a broken cross-reference is a documentation
+        # bug, and it is cheaper to catch here than for a reader to hit it.
+        run: uv run --group docs sphinx-build -b html -W --keep-going docs docs/_build/html
+
+      - name: Check that the figures are current
+        # The figures are rendered from a real pipeline run. If regenerating
+        # them changes the bytes, the committed ones are stale.
+        run: |
+          uv run --group docs python docs/_scripts/make_figures.py
+          if ! git diff --quiet -- docs/_static; then
+            echo "::warning::Committed figures differ from a fresh render."
+            git diff --stat -- docs/_static
+          fi
+
+      - name: Upload the site
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/_build/html
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

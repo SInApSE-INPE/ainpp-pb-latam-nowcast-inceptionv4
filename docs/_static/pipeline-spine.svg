@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 430" width="980" height="430"
+     role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+  <title id="title">The nowcast pipeline spine</title>
+  <desc id="desc">Observations flow from a source through a decoder, optional preprocessing and a
+  transform into the predictor, then back out through the inverse transform, optional
+  postprocessing and a sink. Boxes are coloured by what binds them: configuration, the model
+  plugin, or the runtime itself.</desc>
+
+  <rect x="0" y="0" width="980" height="430" rx="10" fill="#ffffff"/>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7"
+            orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4a5568"/>
+    </marker>
+    <style>
+      .box { stroke-width: 1.6; rx: 7; }
+      .cfg  { fill: #e3f0f8; stroke: #2a6f97; }
+      .plug { fill: #f3e9f9; stroke: #7b4397; }
+      .rt   { fill: #edf2f7; stroke: #4a5568; }
+      .opt  { stroke-dasharray: 6 4; }
+      .lbl  { font-size: 14px; fill: #1a2733; font-weight: 600; }
+      .sub  { font-size: 11px; fill: #55636f; }
+      .leg  { font-size: 12px; fill: #37434f; }
+      .flow { stroke: #4a5568; stroke-width: 1.8; fill: none; marker-end: url(#arrow); }
+      .note { font-size: 11.5px; fill: #6b7785; font-style: italic; }
+    </style>
+  </defs>
+
+  <!-- input path -->
+  <g>
+    <rect class="box cfg" x="28" y="58" width="150" height="58"/>
+    <text class="lbl" x="103" y="82" text-anchor="middle">Source</text>
+    <text class="sub" x="103" y="100" text-anchor="middle">lists and fetches</text>
+
+    <rect class="box cfg" x="214" y="58" width="150" height="58"/>
+    <text class="lbl" x="289" y="82" text-anchor="middle">Decoder</text>
+    <text class="sub" x="289" y="100" text-anchor="middle">bytes to a Frame</text>
+
+    <rect class="box cfg opt" x="400" y="58" width="150" height="58"/>
+    <text class="lbl" x="475" y="82" text-anchor="middle">Preprocess</text>
+    <text class="sub" x="475" y="100" text-anchor="middle">may be empty</text>
+
+    <rect class="box plug opt" x="586" y="58" width="178" height="58"/>
+    <text class="lbl" x="675" y="82" text-anchor="middle">Transform.forward</text>
+    <text class="sub" x="675" y="100" text-anchor="middle">identity when absent</text>
+
+    <path class="flow" d="M 178 87 L 208 87"/>
+    <path class="flow" d="M 364 87 L 394 87"/>
+    <path class="flow" d="M 550 87 L 580 87"/>
+  </g>
+
+  <!-- the model -->
+  <path class="flow" d="M 764 87 L 836 87 Q 852 87 852 103 L 852 176"/>
+  <rect class="box plug" x="742" y="186" width="200" height="62"/>
+  <text class="lbl" x="842" y="211" text-anchor="middle">Predictor</text>
+  <text class="sub" x="842" y="229" text-anchor="middle">yields leads, in order</text>
+  <path class="flow" d="M 742 217 L 180 217"/>
+
+  <!-- output path -->
+  <g>
+    <path class="flow" d="M 120 248 L 120 300"/>
+    <rect class="box plug opt" x="28" y="310" width="178" height="58"/>
+    <text class="lbl" x="117" y="334" text-anchor="middle">Transform.inverse</text>
+    <text class="sub" x="117" y="352" text-anchor="middle">back to real units</text>
+
+    <rect class="box cfg opt" x="242" y="310" width="150" height="58"/>
+    <text class="lbl" x="317" y="334" text-anchor="middle">Postprocess</text>
+    <text class="sub" x="317" y="352" text-anchor="middle">may be empty</text>
+
+    <rect class="box cfg" x="428" y="310" width="150" height="58"/>
+    <text class="lbl" x="503" y="334" text-anchor="middle">Sink</text>
+    <text class="sub" x="503" y="352" text-anchor="middle">names and writes</text>
+
+    <path class="flow" d="M 206 339 L 236 339"/>
+    <path class="flow" d="M 392 339 L 422 339"/>
+  </g>
+
+  <!-- what the runtime keeps for itself -->
+  <rect class="box rt" x="614" y="296" width="328" height="86"/>
+  <text class="lbl" x="778" y="322" text-anchor="middle">The runtime owns the sequence</text>
+  <text class="sub" x="778" y="342" text-anchor="middle">atomic publication, idempotent polling,</text>
+  <text class="sub" x="778" y="358" text-anchor="middle">advisory locking, the provenance manifest</text>
+  <text class="sub" x="778" y="374" text-anchor="middle">lead numbering, valid times, the mask</text>
+
+  <!-- legend -->
+  <g transform="translate(28, 16)">
+    <rect class="box cfg" x="0" y="0" width="16" height="12"/>
+    <text class="leg" x="24" y="10">bound by configuration</text>
+    <rect class="box plug" x="186" y="0" width="16" height="12"/>
+    <text class="leg" x="210" y="10">bound by the model plugin</text>
+    <rect class="box rt" x="392" y="0" width="16" height="12"/>
+    <text class="leg" x="416" y="10">the runtime</text>
+    <line x1="520" y1="6" x2="548" y2="6" stroke="#4a5568" stroke-width="1.6"
+          stroke-dasharray="6 4"/>
+    <text class="leg" x="556" y="10">optional: may be absent entirely</text>
+  </g>
+
+  <text class="note" x="28" y="408">Arrays cross every boundary as NumPy. No contract names a
+  deep learning framework, so a model may use any or none.</text>
+</svg>

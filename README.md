@@ -3,6 +3,10 @@
 Operational infrastructure for publishing gridded nowcasts on a schedule, with
 auditable provenance, and the models that run on it.
 
+**[Read the documentation](https://sinapse-inpe.github.io/ainpp-pb-latam-nowcast-inceptionv4/)**
+— tutorials, concepts, and a reference. Build it locally with
+`uv sync --group docs && uv run --group docs sphinx-build -b html docs docs/_build/html`.
+
 The scope is deliberately narrow — see
 [ADR 0001](docs/adr/0001-pipeline-shape-scope.md):
 

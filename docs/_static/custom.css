@@ -1,0 +1,22 @@
+/* Wider content than the theme default: captured terminal sessions and the
+   manifest examples are wide, and wrapping them makes them unreadable. */
+.wy-nav-content {
+    max-width: 1100px;
+}
+
+/* Captured sessions are long; keep them scrollable instead of endless. */
+div.highlight pre {
+    max-height: 32rem;
+    overflow-y: auto;
+}
+
+/* A marker used throughout the tutorials for a spot the reader must change. */
+code.docutils.literal span.pre {
+    white-space: pre-wrap;
+}
+
+table.docutils td,
+table.docutils th {
+    white-space: normal !important;
+    vertical-align: top;
+}

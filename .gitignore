@@ -16,6 +16,9 @@ reference/
 build/
 dist/
 
+# Rendered documentation; the site is built in CI
+docs/_build/
+
 # Generated data and forecasts
 data/
 outputs/

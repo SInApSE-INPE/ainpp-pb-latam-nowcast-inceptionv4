@@ -357,6 +357,65 @@ class $class_name(ConformanceSuite):
         return deployment
 ''')
 
+SAMPLE_INPUTS = Template("""\"\"\"Write sample observations this project can run on.
+
+Uses the deployment's own decoder, so the files are exactly what it expects
+and nothing here can drift from the real format.
+\"\"\"
+
+import argparse
+from datetime import UTC, datetime
+from pathlib import Path
+
+import numpy as np
+
+from $package.entrypoint import compose, decoder
+from $package.entrypoint import parser as cli_parser
+
+
+def main() -> int:
+    cli = argparse.ArgumentParser(description=__doc__)
+    cli.add_argument("--into", type=Path, default=Path("data/raw"))
+    cli.add_argument("--config", type=Path, default=Path("config/default.json"))
+    cli.add_argument(
+        "--run-time",
+        help="Timestamp of the LAST observation, e.g. 2000-01-02T12:00:00Z",
+    )
+    args = cli.parse_args()
+    args.into.mkdir(parents=True, exist_ok=True)
+
+    probe = cli_parser().parse_args(
+        ["--config", str(args.config), "--source", "local", "--input-dir", str(args.into)]
+    )
+    deployment, _ = compose(probe)
+    grid = deployment.grid
+    reader = decoder()
+    window = deployment.load().predictor.window
+
+    if args.run_time is None:
+        latest = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    else:
+        latest = datetime.fromisoformat(args.run_time.replace("Z", "+00:00"))
+
+    rows = np.linspace(0.0, 1.0, grid.height, dtype=np.float32)[:, None]
+    columns = np.linspace(0.0, 1.0, grid.width, dtype=np.float32)[None, :]
+    written = []
+    for index, observed in enumerate(window.times(latest)):
+        values = (rows + columns + index * 0.25).astype(np.float32)
+        path = reader.synthesize(args.into / reader.filename(observed), values, grid)
+        written.append(path)
+
+    print(f"Wrote {len(written)} observations to {args.into}")
+    for path in written:
+        print(f"  {path.name}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+""")
+
+
 README = Template('''# $name
 
 Operational nowcasting on the shared `nowcast-runtime`.
@@ -387,10 +446,18 @@ uv run ruff check src tests
 
 ## Run it
 
+The project makes its own sample observations, through the same decoder it
+reads with, so they cannot drift from the real format:
+
 ```bash
+uv run python tools/make_sample_inputs.py --into data/raw
 uv run $slug-nowcast --config config/default.json \\
     --source local --input-dir data/raw --output-dir outputs
 ```
+
+Each run writes one directory per issue time, holding the forecast files and
+a `manifest.json` recording the artifacts, stages, versions and checksums
+that produced them.
 
 ## What the runtime will not do for you
 
@@ -504,10 +571,11 @@ def render(plan: Plan) -> dict[str, str]:
         f"src/{plan.package}/model.py": MODEL.substitute(values),
         f"src/{plan.package}/entrypoint.py": ENTRYPOINT.substitute(values),
         "tests/test_conformance.py": CONFORMANCE.substitute(values),
+        "tools/make_sample_inputs.py": SAMPLE_INPUTS.substitute(values),
     }
 
 
-def write_bundle(bundle: Path) -> None:
+def write_bundle(bundle: Path) -> list[Path]:
     """A placeholder bundle with a real manifest, so conformance runs at once."""
     import numpy as np
 
@@ -529,6 +597,7 @@ def write_bundle(bundle: Path) -> None:
         + "\n",
         encoding="utf-8",
     )
+    return [checkpoint, bundle / "manifest.json"]
 
 
 def plan_from(args: argparse.Namespace) -> Plan:
@@ -559,8 +628,7 @@ def generate(plan: Plan, force: bool = False) -> list[Path]:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
         written.append(path)
-    write_bundle(plan.target / "artifacts" / "v1")
-    written.append(plan.target / "artifacts" / "v1" / "manifest.json")
+    written.extend(write_bundle(plan.target / "artifacts" / "v1"))
     return written
 
 
