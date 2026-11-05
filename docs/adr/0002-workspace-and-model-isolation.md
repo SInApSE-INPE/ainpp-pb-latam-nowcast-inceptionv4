@@ -42,15 +42,15 @@ rather than by duplicating source.
   resolve into separate environments. This ergonomic cost is the direct price of
   per-model locks and is documented in the workspace README.
 - A model's container build context is the workspace root, since the runtime is a
-  path dependency. The root `pyproject.toml` must be part of that context: it
-  declares the torch index that the runtime resolves through as a workspace
-  member, so `uv sync --locked` is only reproducible when the file is present.
-  Replacing the path source with a published version turns the context back into
-  the model directory alone and removes this coupling.
-- The runtime package is therefore not self-describing about its torch build. A
-  consumer installing `nowcast-runtime` from an index chooses its own, which is
-  the intended behaviour but worth stating, because it is invisible from inside
-  the workspace.
+  path dependency. Replacing that path source with a published version turns the
+  context back into the model directory alone.
+
+  **Corrected.** This record previously said the root `pyproject.toml` had to be
+  part of that context, because it declared the torch index the runtime resolved
+  through. The runtime no longer depends on any deep learning framework
+  ([ADR 0006](0006-scaffolding-and-a-framework-free-runtime.md)), so that coupling
+  is gone and
+  the build context no longer includes the root file.
 - One ruff configuration at the root governs every package and model.
 
 ## Alternatives rejected

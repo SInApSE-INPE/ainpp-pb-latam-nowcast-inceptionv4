@@ -11,3 +11,4 @@ later reader can tell a deliberate choice from an accident.
 | [0003](0003-ports-and-their-granularity.md) | The ports, and how many of them there are | Accepted |
 | [0004](0004-optional-stages-and-built-in-adapters.md) | Optional stages, and adapters that are configuration | Accepted |
 | [0005](0005-conformance-as-the-contract.md) | Conformance is where the contract is actually enforced | Accepted |
+| [0006](0006-scaffolding-and-a-framework-free-runtime.md) | Scaffold something that already works, and keep the runtime framework free | Accepted |

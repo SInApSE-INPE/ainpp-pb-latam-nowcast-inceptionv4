@@ -9,13 +9,8 @@ exclude = ["models/*"]
 [dependency-groups]
 dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
 
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
-
-[tool.uv.sources]
-torch = { index = "pytorch-cpu" }
+# No torch index here: the runtime depends on no framework, so each model
+# declares its own build in its own project.
 
 # One lint configuration for every package and model; ruff discovers it by walking up.
 [tool.ruff]

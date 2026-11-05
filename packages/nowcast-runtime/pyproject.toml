@@ -7,14 +7,16 @@ name = "nowcast-runtime"
 version = "0.3.0"
 description = "Operational runtime for scheduled, auditable gridded nowcast publication"
 requires-python = ">=3.11,<3.14"
+# No deep learning framework: no port mentions one, and nothing here imports
+# one. A model on torch, TensorFlow, JAX or plain NumPy brings its own.
 dependencies = [
     "numpy>=1.26,<3",
     "rasterio>=1.4,<2",
-    "torch>=2.5",
 ]
 
 [project.scripts]
 nowcast-download-artifacts = "nowcast_runtime.download_artifacts:main"
+nowcast-new-model = "nowcast_runtime.scaffold:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/nowcast_runtime"]

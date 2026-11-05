@@ -74,7 +74,21 @@ and model, so lint rules cannot drift between them.
 
 ## Adding a model
 
-A model declares a `ModelPlugin`. Only six fields are required:
+Start from something that already runs:
+
+```bash
+uv run nowcast-new-model --name "MyUNet" --product my_product --units mm/h
+uv sync --project models/myunet
+uv run --directory models/myunet pytest
+```
+
+That generates a complete project with a persistence predictor and a placeholder
+bundle, and the conformance suite is **green before you write a line**. Every
+spot you must change carries a `REPLACE THIS` marker, and the generated
+`README.md` lists them in the order to do them. Run the suite after each change:
+a failure then means the thing you just touched.
+
+What you are filling in is a `ModelPlugin`. Only six fields are required:
 
 ```python
 PLUGIN = ModelPlugin(

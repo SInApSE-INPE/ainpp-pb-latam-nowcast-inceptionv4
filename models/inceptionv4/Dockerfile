@@ -10,9 +10,6 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_CACHE_DIR=/opt/uv-cache
 WORKDIR /build
 RUN python -m pip install --no-cache-dir uv==0.11.32
-# The workspace root carries the torch index that the runtime member resolves
-# through, so the lock is only reproducible when this file is present.
-COPY pyproject.toml ./
 COPY packages/nowcast-runtime ./packages/nowcast-runtime
 COPY models/inceptionv4/pyproject.toml models/inceptionv4/uv.lock models/inceptionv4/README.md \
      ./models/inceptionv4/
