@@ -29,23 +29,56 @@ def frame(values, missing=None, units="mm/h"):
 # --- naming -----------------------------------------------------------------
 
 
-def test_timestamped_name_reads_the_hour_and_verifies_an_interval():
+def test_timestamped_name_reads_the_stamp_and_verifies_an_interval():
     naming = TimestampedName(
-        pattern=r"p\.(?P<date>\d{8})\.(?P<hour>\d{2})00(?:_(?P<end>\d{2})00)?\.bin",
-        interval_hours=1,
+        pattern=r"p\.(?P<stamp>\d{8}\.\d{4})(?:_(?P<end>\d{4}))?\.bin",
+        stamp_format="%Y%m%d.%H%M",
+        template="p.%Y%m%d.%H%M.bin",
+        interval=timedelta(hours=1),
+        end_format="%H%M",
     )
     assert naming.observed_at("p.20000102.1300.bin") == datetime(2000, 1, 2, 13, tzinfo=UTC)
     assert naming.observed_at("p.20000102.1300_1400.bin") == datetime(2000, 1, 2, 13, tzinfo=UTC)
     assert naming.observed_at("other.bin") is None
+    assert naming.filename(datetime(2000, 1, 2, 13, tzinfo=UTC)) == "p.20000102.1300.bin"
     with pytest.raises(ValueError, match="Unexpected interval"):
         naming.observed_at("p.20000102.1300_1700.bin")
 
 
-def test_timestamped_name_requires_its_groups():
-    with pytest.raises(ValueError, match="date and hour groups"):
-        TimestampedName(pattern=r"p\.(?P<date>\d{8})\.bin")
+def test_timestamped_name_supports_a_sub_hourly_product():
+    """A ten-minute product is a different stamp format, not a different class."""
+    naming = TimestampedName(
+        pattern=r"radar\.(?P<stamp>\d{12})\.bin",
+        stamp_format="%Y%m%d%H%M",
+        template="radar.%Y%m%d%H%M.bin",
+    )
+    assert naming.observed_at("radar.200001021310.bin") == datetime(
+        2000, 1, 2, 13, 10, tzinfo=UTC
+    )
+    assert naming.filename(datetime(2000, 1, 2, 13, 10, tzinfo=UTC)) == "radar.200001021310.bin"
+
+
+def test_timestamped_name_requires_consistent_declarations():
+    with pytest.raises(ValueError, match="stamp group"):
+        TimestampedName(pattern=r"p\.(?P<date>\d{8})\.bin", stamp_format="%Y%m%d")
+    with pytest.raises(ValueError, match="declared together"):
+        TimestampedName(
+            pattern=r"p\.(?P<stamp>\d{8})\.bin",
+            stamp_format="%Y%m%d",
+            interval=timedelta(hours=1),
+        )
     with pytest.raises(ValueError, match="end group"):
-        TimestampedName(pattern=r"p\.(?P<date>\d{8})\.(?P<hour>\d{2})\.bin", interval_hours=1)
+        TimestampedName(
+            pattern=r"p\.(?P<stamp>\d{8})\.bin",
+            stamp_format="%Y%m%d",
+            interval=timedelta(hours=1),
+            end_format="%H%M",
+        )
+    naming = TimestampedName(
+        pattern=r"p\.(?P<stamp>\d{8})\.bin", stamp_format="%Y%m%d", template="q.%Y%m%d.bin"
+    )
+    with pytest.raises(ValueError, match="the pattern rejects"):
+        naming.filename(datetime(2000, 1, 2, tzinfo=UTC))
 
 
 # --- decoding ---------------------------------------------------------------
@@ -60,7 +93,7 @@ def test_gsmap_is_expressed_as_configuration_of_the_raw_decoder():
     assert decoder.observed_at("gsmap_now.20000102.1300_1400.dat.gz") == datetime(
         2000, 1, 2, 13, tzinfo=UTC
     )
-    assert gsmap("gsmap_nrt", GSMAP_GRID).naming.interval_hours is None
+    assert gsmap("gsmap_nrt", GSMAP_GRID).naming.interval is None
     with pytest.raises(ValueError, match="Unknown GSMaP product"):
         gsmap("radar", GSMAP_GRID)
 

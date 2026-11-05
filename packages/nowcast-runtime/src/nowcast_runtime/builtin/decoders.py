@@ -5,7 +5,7 @@ from __future__ import annotations
 import gzip
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -15,53 +15,71 @@ from ..ports import Frame, Grid
 
 @dataclass(frozen=True)
 class TimestampedName:
-    """A file name contract: a regex naming its own date and hour groups.
+    """A file name contract: a regex with a `stamp` group, and how to read it.
 
-    Optional groups make this cover a provider that appends an interval, such as
-    the GSMaP NOW product. When interval_hours is set and the pattern matched an
-    end group, the interval is verified rather than trusted.
+    One group holding the whole timestamp, rather than separate date and hour
+    groups, is what admits a sub-hourly product: a ten-minute observation is a
+    different `stamp_format`, not a different class.
+
+    `template` generates names and `pattern` matches them, because a pattern with
+    optional groups accepts more names than it can produce.
+
+    `interval` and `end_format` together verify a provider that appends the end
+    of its accumulation window, such as the GSMaP NOW product, instead of
+    trusting it.
     """
 
     pattern: str
-    interval_hours: int | None = None
-    date_format: str = "%Y%m%d%H"
+    stamp_format: str
+    template: str | None = None
+    interval: timedelta | None = None
+    end_format: str | None = None
 
     def __post_init__(self):
         compiled = re.compile(self.pattern)
-        required = {"date", "hour"}
-        if not required <= set(compiled.groupindex):
-            raise ValueError("Name pattern must define date and hour groups")
-        if self.interval_hours is not None and "end" not in compiled.groupindex:
-            raise ValueError("interval_hours requires an end group in the pattern")
+        if "stamp" not in compiled.groupindex:
+            raise ValueError("Name pattern must define a stamp group")
+        if (self.interval is None) != (self.end_format is None):
+            raise ValueError("interval and end_format must be declared together")
+        if self.end_format is not None and "end" not in compiled.groupindex:
+            raise ValueError("An interval check requires an end group in the pattern")
         object.__setattr__(self, "_compiled", compiled)
 
     @property
     def compiled(self) -> re.Pattern:
         return self._compiled  # type: ignore[attr-defined]
 
+    def filename(self, observed: datetime) -> str:
+        """Build a name for an observation time, checked against the pattern."""
+        if self.template is None:
+            raise ValueError("This name contract cannot generate names; set a template")
+        name = observed.strftime(self.template)
+        if self.compiled.fullmatch(name) is None:
+            raise ValueError(f"Template produced {name!r}, which the pattern rejects")
+        return name
+
     def observed_at(self, name: str) -> datetime | None:
         match = self.compiled.fullmatch(name)
         if not match:
             return None
-        observed = datetime.strptime(
-            match["date"] + match["hour"], self.date_format
-        ).replace(tzinfo=UTC)
+        observed = datetime.strptime(match["stamp"], self.stamp_format).replace(tzinfo=UTC)
         end = match.groupdict().get("end")
-        if self.interval_hours is not None and end is not None:
-            if int(end) != (observed.hour + self.interval_hours) % 24:
+        if end is not None and self.interval is not None:
+            expected = (observed + self.interval).strftime(self.end_format)
+            if end != expected:
                 raise ValueError(f"Unexpected interval in observation name: {name}")
         return observed
 
 
 @dataclass(frozen=True)
 class RawBinaryDecoder:
-    """A headerless, fixed-shape binary field on a regular global grid.
+    """A headerless, fixed-shape binary field on a regular grid.
 
     Everything that varies between such products is a parameter: byte order and
-    width through dtype, the array shape, the grid the array covers, how far the
-    columns must be rolled to reach that grid origin, the units, and the file
-    name contract. The GSMaP binary format is one configuration of this class,
-    which is the point: another raw product needs no new module.
+    width through dtype, the grid the array covers, how far the columns must be
+    rolled to reach that grid origin, the units, and the file name contract. The
+    GSMaP binary format is one configuration of this class, which is the point:
+    another raw product needs no new module.
     """
 
     native_grid: Grid
@@ -87,6 +105,10 @@ class RawBinaryDecoder:
 
     def observed_at(self, name: str) -> datetime | None:
         return self.naming.observed_at(name)
+
+    def filename(self, observed: datetime) -> str:
+        """A name this decoder recognizes, for generating synthetic observations."""
+        return self.naming.filename(observed)
 
     def read(self, path: Path, grid: Grid) -> Frame:
         """Decode and crop, raising on truncation or a misaligned request.
@@ -116,29 +138,59 @@ class RawBinaryDecoder:
         missing = ~np.isfinite(values)
         return Frame(values[np.newaxis], missing[np.newaxis], self.units, grid, observed)
 
+    def synthesize(self, path: Path, values: np.ndarray, grid: Grid) -> Path:
+        """Write a file this decoder reads back as values on grid.
 
-def gsmap(product: str, native_grid: Grid) -> RawBinaryDecoder:
+        The exact inverse of `read`: embed the subgrid in a native-sized array,
+        undo the column roll, and write the raw block. A conformance suite can
+        therefore exercise a whole deployment without any real observation, for
+        any model whose decoder is one of these.
+        """
+        if values.shape != grid.shape:
+            raise ValueError("Synthetic values must match the requested grid")
+        row, column = self.native_grid.locate(grid)
+        field = np.zeros(self._shape, dtype=np.dtype(self.dtype))  # type: ignore[attr-defined]
+        field[row : row + grid.height, column : column + grid.width] = values
+        if self.roll_columns:
+            field = np.roll(field, -self.roll_columns, axis=1)
+        payload = field.tobytes()
+        if self.gzipped:
+            with gzip.open(path, "wb", compresslevel=1) as stream:
+                stream.write(payload)
+        else:
+            path.write_bytes(payload)
+        return path
+
+
+GSMAP_GRID = Grid("EPSG:4326", -180.0, 60.0, 0.1, 0.1, 3600, 1200)
+GSMAP_PRODUCTS = ("gsmap_now", "gsmap_nrt")
+
+
+def gsmap(product: str, native_grid: Grid = GSMAP_GRID) -> RawBinaryDecoder:
     """The GSMaP hourly rain rate binary, expressed as configuration.
 
     JAXA stores the global field starting half a cell east of the antimeridian,
     so the columns are rolled by half the width to reach a -180 origin. Rows are
-    already north first. The NOW product may append a one-hour interval.
+    already north first. The NOW product may append the end of its hour.
     """
-    if product not in {"gsmap_now", "gsmap_nrt"}:
+    if product not in GSMAP_PRODUCTS:
         raise ValueError(f"Unknown GSMaP product: {product}")
-    interval = r"(?:_(?P<end>\d{2})00)?" if product == "gsmap_now" else ""
+    now = product == "gsmap_now"
+    end_group = r"(?:_(?P<end>\d{4}))?" if now else ""
     return RawBinaryDecoder(
         native_grid=native_grid,
         naming=TimestampedName(
-            pattern=rf"{re.escape(product)}\.(?P<date>\d{{8}})\.(?P<hour>\d{{2}})00"
-            + interval
-            + r"\.dat\.gz",
-            interval_hours=1 if product == "gsmap_now" else None,
+            pattern=(
+                rf"{re.escape(product)}\.(?P<stamp>\d{{8}}\.\d{{4}})"
+                + end_group
+                + r"\.dat\.gz"
+            ),
+            stamp_format="%Y%m%d.%H%M",
+            template=f"{product}.%Y%m%d.%H%M.dat.gz",
+            interval=timedelta(hours=1) if now else None,
+            end_format="%H%M" if now else None,
         ),
         units="mm/h",
         dtype="<f4",
         roll_columns=native_grid.width // 2,
     )
-
-
-GSMAP_GRID = Grid("EPSG:4326", -180.0, 60.0, 0.1, 0.1, 3600, 1200)

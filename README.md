@@ -109,5 +109,37 @@ deployment configured. What it cannot check is scientific validity — whether a
 model trained on one product has skill on another stays the job of that model's
 own validation record.
 
-`models/inceptionv4` is the worked example; its `entrypoint.py` is the whole
+## Proving a model conforms
+
+Subclass the shared suite and implement one hook:
+
+```python
+from nowcast_runtime.testing import ConformanceSuite
+
+class TestMyModel(ConformanceSuite):
+    product = "my_product"
+
+    def build(self, tmp_path):
+        return compose(args_for(tmp_path))
+```
+
+It runs your real composition root and checks what a type cannot: that the
+transform round trips, that each stage leaves a frame on its own grid, that
+valid times follow your declared step, that a completed run is recognized rather
+than redone, that an incomplete window waits instead of narrowing, and that a
+failed write leaves nothing behind. When your decoder is a built-in, the suite
+synthesizes its own observations, so none of this needs real data.
+
+See [ADR 0005](docs/adr/0005-conformance-as-the-contract.md) for why this is the
+layer that actually enforces the contracts.
+
+## Worked examples
+
+`models/inceptionv4` is the real one; its `entrypoint.py` is the whole
 composition and is worth reading first.
+
+`packages/nowcast-runtime/tests/test_reference_deployment.py` is a deliberately
+different deployment: no transform, no stages, a ten-minute step, a non-uniform
+window, two members and two output variables. It is synthetic and does not
+replace a second real model, but it is the shortest complete example of the
+contracts, and writing it found two defects in the runtime.

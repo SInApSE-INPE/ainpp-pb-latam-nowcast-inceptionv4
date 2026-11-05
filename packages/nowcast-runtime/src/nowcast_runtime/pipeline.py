@@ -132,8 +132,9 @@ def run(args: argparse.Namespace, deployment: Deployment, product: str) -> Path:
     frames = [deployment.decoder.read(path, deployment.grid) for path in paths]
     fractions = [float(frame.missing.mean()) for frame in frames]
     staged = [apply_stages(frame, deployment.input_stages(loaded.preprocess)) for frame in frames]
-    # A cell missing anywhere in the history is masked in every output.
-    missing = np.any([frame.missing for frame in staged], axis=0)
+    # A cell missing in any input variable at any time is masked in every output,
+    # reduced to one variable so it broadcasts whatever shape a model emits.
+    missing = np.any([frame.missing for frame in staged], axis=(0, 1), keepdims=True)[0]
     inputs = transform.forward(np.stack([frame.values for frame in staged]))
 
     metadata = manifest(args, deployment, loaded, observations, paths, fractions, missing, steps)
@@ -154,8 +155,11 @@ def run(args: argparse.Namespace, deployment: Deployment, product: str) -> Path:
                 run_time + lead * predictor.step,
             )
             prediction = apply_stages(prediction, deployment.output_stages(loaded.postprocess))
-            if prediction.values.shape[1:] != (staged[0].variables, *deployment.grid.shape):
-                raise ValueError("Model returned an invalid forecast shape")
+            expected = (predictor.output_variables, *deployment.grid.shape)
+            if prediction.values.shape[1:] != expected:
+                raise ValueError(
+                    f"Model returned {prediction.values.shape[1:]} for a lead, expected {expected}"
+                )
             for member in range(prediction.members):
                 name = deployment.sink.filename(deployment.slug, run_time, prediction, member)
                 deployment.sink.write(

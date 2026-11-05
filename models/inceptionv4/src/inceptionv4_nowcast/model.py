@@ -112,6 +112,7 @@ class InceptionV4Predictor:
         self.step = STEP
         self.window = WindowSpec.uniform(STEP, module.input_steps)
         self.output_steps = module.output_steps
+        self.output_variables = 1
 
     def leads(self, inputs: np.ndarray, steps: int) -> Iterator[np.ndarray]:
         """One forward pass, then yield each lead as (members, variables, rows, columns)."""

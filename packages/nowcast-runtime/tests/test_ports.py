@@ -225,6 +225,7 @@ def test_predictor_protocol_recognizes_a_minimal_implementation():
         window = WindowSpec.uniform(timedelta(hours=1), 12)
         step = timedelta(hours=1)
         output_steps = 6
+        output_variables = 1
         grid = LATAM
 
         def leads(self, inputs, steps):
@@ -232,6 +233,21 @@ def test_predictor_protocol_recognizes_a_minimal_implementation():
 
     assert isinstance(Direct(), Predictor)
     assert not isinstance(object(), Predictor)
+
+
+def test_predictor_protocol_requires_the_declared_output_width():
+    """A model may emit more variables than it consumes, so it must say how many."""
+
+    class Silent:
+        window = WindowSpec.uniform(timedelta(hours=1), 12)
+        step = timedelta(hours=1)
+        output_steps = 6
+        grid = LATAM
+
+        def leads(self, inputs, steps):
+            yield from ()
+
+    assert not isinstance(Silent(), Predictor)
 
 
 def test_stage_protocols_recognize_a_plain_object():

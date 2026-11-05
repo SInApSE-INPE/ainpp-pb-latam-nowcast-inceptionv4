@@ -345,6 +345,14 @@ class Predictor(Protocol):
         """Native horizon in leads. A request may be shorter, never longer."""
 
     @property
+    def output_variables(self) -> int:
+        """How many variables each lead carries.
+
+        Declared rather than inferred from the inputs: a model may consume one
+        field and emit several, such as a rate beside an exceedance probability.
+        """
+
+    @property
     def grid(self) -> Grid:
         """The grid this instance was loaded for."""
 
