@@ -21,16 +21,19 @@ replacement.
 
 ## The build context is the workspace root
 
-The runtime is a path dependency, so the build needs both directories:
+The runtime is a path dependency, so the build needs both directories.
+**From the workspace root:**
 
 ```bash
 docker build -f models/myunet/Dockerfile -t myunet-nowcast:local .
 ```
 
 Note the trailing `.`: the context is the repository root, not the model
-directory. `compose.yaml` already sets this:
+directory. `models/myunet/compose.yaml` already sets this:
 
-```yaml
+```{code-block} yaml
+:caption: models/myunet/compose.yaml
+
     build:
       context: ../..
       dockerfile: models/myunet/Dockerfile
@@ -65,6 +68,8 @@ a transient transfer failure.
 
 ## Running it
 
+**From the workspace root:**
+
 ```bash
 cd models/myunet
 cp deploy/docker.env.example .env      # if your project has one
@@ -76,9 +81,12 @@ docker compose up -d --build
 docker compose logs -f
 ```
 
-`.env` holds credentials and the poll interval:
+`.env` holds credentials and the poll interval. It is gitignored, and it goes
+beside `compose.yaml`:
 
-```text
+```{code-block} text
+:caption: models/myunet/.env (new file, never committed)
+
 MYUNET_FTP_USER=replace_me
 MYUNET_FTP_PASSWORD=replace_me
 NOWCAST_POLL_INTERVAL_SECONDS=300
@@ -103,7 +111,9 @@ the container down.
 
 ## Mounts and permissions
 
-```yaml
+```{code-block} yaml
+:caption: models/myunet/compose.yaml
+
     volumes:
       - ./artifacts/v1:/app/artifacts/v1
       - ./outputs:/app/outputs
@@ -112,7 +122,7 @@ the container down.
 Verified weights and published outputs survive container replacement.
 
 The image runs as UID 10001. To write host-mounted directories as yourself,
-uncomment the `user:` line in `compose.yaml` and set the IDs:
+uncomment the `user:` line in `models/myunet/compose.yaml` and set the IDs:
 
 ```bash
 id -u && id -g

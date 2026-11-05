@@ -9,7 +9,9 @@ model alone.
 
 Declare how many a lead carries, then yield them:
 
-```python
+```{code-block} python
+:caption: models/myunet/src/myunet_nowcast/model.py
+
 class MyPredictor:
     output_variables = 2            # a rate, and an exceedance probability
 
@@ -26,9 +28,11 @@ consume one field and emit several, which the pipeline previously rejected
 because it checked the output width against the input's.
 ```
 
-Name the bands so the files are self-describing:
+Name the bands so the files are self-describing, in the `Deployment(...)` call:
 
-```python
+```{code-block} python
+:caption: models/myunet/src/myunet_nowcast/entrypoint.py
+
 sink = GeoTiffSink(variable_names=("rate", "probability"))
 ```
 
@@ -50,7 +54,9 @@ sinks, or accept the label and document it.
 
 ## Ensemble members
 
-```python
+```{code-block} python
+:caption: models/myunet/src/myunet_nowcast/model.py
+
 class MyEnsemble:
     output_variables = 1
 
@@ -77,7 +83,9 @@ unadorned.
 
 The run manifest records the member on every output:
 
-```json
+```{code-block} json
+:caption: one entry from outputs/.../manifest.json, written by the runtime
+
 {"name": "...", "lead_hours": 1, "member": 1, "valid_time": "...", "sha256": "..."}
 ```
 
@@ -86,7 +94,9 @@ The run manifest records the member on every output:
 Quantiles are members with meaning. Nothing in the contract distinguishes
 them, so record the mapping yourself:
 
-```python
+```{code-block} python
+:caption: models/myunet/src/myunet_nowcast/entrypoint.py
+
 QUANTILES = (0.1, 0.5, 0.9)
 
 PLUGIN = ModelPlugin(
@@ -97,6 +107,13 @@ PLUGIN = ModelPlugin(
 
 That lands in the manifest's `versions` block, which is a slightly awkward
 home for it. A dedicated field would be better and does not exist yet.
+
+```{tip}
+The ensemble size itself belongs in `models/myunet/config/default.json`, not in
+code: it is operationally variable. The runtime carries keys it does not own in
+`config.extra`, so `compose` reads it from there. IRENE does exactly this —
+see [Porting a published model](06-porting-a-published-model.md), step 7.
+```
 
 ## The mask
 

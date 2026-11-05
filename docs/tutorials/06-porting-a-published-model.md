@@ -49,9 +49,31 @@ The facts that shaped every later decision, from the model card and the source:
 
 ## 2. Scaffold, then replace
 
+**From the workspace root:**
+
 ```bash
 uv run nowcast-new-model --name "IRENE" --slug irene \
     --product dpc_sri --units "mm/h" --into models/irene
+```
+
+Everything that follows is inside `models/irene/`. The files this port
+touched, beyond what the scaffold wrote:
+
+```text
+models/irene/
+├── config/default.json              edited: domain, policy, members, seed
+├── artifacts/v1/                    replaced: real bundle and manifest
+├── src/irene_nowcast/
+│   ├── entrypoint.py                rewritten: composition root
+│   ├── model.py                     rewritten: predictor and transform
+│   ├── decoder.py                   new: the DPC NetCDF format
+│   ├── stages.py                    new: the Threshold postprocess
+│   └── _vendor/                     new: upstream architecture, verbatim
+│       ├── LICENSE
+│       ├── model.py
+│       └── utils.py
+├── tests/test_conformance.py        edited: realistic radar fields
+└── tools/prepare_artifacts.py       new: shrink the checkpoint
 ```
 
 ## 3. Shrink the checkpoint before it reaches production
@@ -60,7 +82,13 @@ Two thirds of the published file is optimizer state, schedulers and loop state.
 Keeping it means every deployment downloads and checksums 770 MB to run a
 257 MB model, and loads it with `weights_only=False` on every container start.
 
-`tools/prepare_artifacts.py` does that conversion **once, offline**:
+`models/irene/tools/prepare_artifacts.py` does that conversion **once,
+offline**. From `models/irene/`:
+
+```bash
+uv run python tools/prepare_artifacts.py \
+    --checkpoint /path/to/model.ckpt --bundle artifacts/v1
+```
 
 ```text
 Extracted 40 tensors
@@ -84,9 +112,9 @@ The published package requires Python 3.13 and declares twenty-odd
 dependencies including JupyterLab, TensorBoard and pysteps. Inference needs
 none of that.
 
-`src/irene_nowcast/_vendor/` holds `model.py` and `utils.py` copied verbatim,
-with the upstream BSD 2-Clause licence beside them. Both import only torch and
-numpy.
+`models/irene/src/irene_nowcast/_vendor/` holds `model.py` and `utils.py`
+copied verbatim, with the upstream BSD 2-Clause licence beside them. Both
+import only torch and numpy.
 
 ```{important}
 Vendored code is kept **byte-identical** to upstream so it can still be diffed
@@ -100,7 +128,9 @@ The published `predict` normalizes internally. Declaring it as the plugin's
 `Transform` instead means the runtime applies it, and **it appears in every run
 manifest**:
 
-```json
+```{code-block} json
+:caption: from a run manifest, models/irene/outputs/.../manifest.json
+
 "normalization": {
   "kind": "marshall-palmer-dbz",
   "relation": "Z = 200 * R**1.6",
@@ -161,6 +191,8 @@ The variable carries `grid_mapping = "crs"` and the file contains no such
 variable. The CRS is therefore an **assertion by configuration**, declared in
 one place and recorded in every manifest so it can be contradicted:
 
+In `models/irene/src/irene_nowcast/entrypoint.py`:
+
     ASSUMED_CRS = "EPSG:3003"
     NATIVE_GRID = Grid(ASSUMED_CRS, -600000.0, 650000.0, 1000.0, 1000.0, 1200, 1400)
 
@@ -170,7 +202,9 @@ beyond: x starts at -599500 and the origin is -600000.
 
 ## 7. Configure the deployment
 
-```json
+```{code-block} json
+:caption: models/irene/config/default.json
+
 {
   "domain": { "west": -200000.0, "south": 0.0, "east": 56000.0, "north": 256000.0 },
   "product": "dpc_sri",
@@ -199,6 +233,8 @@ The domain is 256 × 256 cells, which satisfies the model's multiple-of-32
 constraint without padding.
 
 ## 8. Run it
+
+**From the workspace root:**
 
 ```bash
 uv run --directory models/irene python tools/make_sample_inputs.py \

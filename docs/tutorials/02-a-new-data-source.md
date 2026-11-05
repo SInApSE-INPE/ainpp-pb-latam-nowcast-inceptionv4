@@ -23,9 +23,11 @@ name, nothing matched, and local acquisition was silently broken.
 ## A new format, without writing a decoder
 
 If your data is a headerless binary block on a regular grid, it is
-configuration:
+configuration. Edit the `decoder()` function:
 
-```python
+```{code-block} python
+:caption: models/myunet/src/myunet_nowcast/entrypoint.py
+
 RawBinaryDecoder(
     native_grid=Grid("EPSG:4326", -180.0, 90.0, 0.25, 0.25, 1440, 720),
     naming=TimestampedName(
@@ -55,7 +57,9 @@ RawBinaryDecoder(
 with optional groups accepts more names than it can produce, so both are
 declared and the generated name is checked against the pattern.
 
-```python
+```{code-block} python
+:caption: models/myunet/src/myunet_nowcast/entrypoint.py, inside decoder()
+
 TimestampedName(
     pattern=r"gsmap_now\.(?P<stamp>\d{8}\.\d{4})(?:_(?P<end>\d{4}))?\.dat\.gz",
     stamp_format="%Y%m%d.%H%M",
@@ -77,9 +81,12 @@ class.
 
 ## A format that is not a raw block
 
-Write a decoder. The contract is four members:
+Write a decoder in a module of its own, beside `entrypoint.py`. The contract
+is four members:
 
-```python
+```{code-block} python
+:caption: models/myunet/src/myunet_nowcast/decoder.py (new file)
+
 class NetcdfDecoder:
     def __init__(self, native_grid, variable, units):
         self._grid, self._variable, self._units = native_grid, variable, units
@@ -126,7 +133,11 @@ backwards.
 
 ## A new source
 
-```python
+Another new module beside the others:
+
+```{code-block} python
+:caption: models/myunet/src/myunet_nowcast/source.py (new file)
+
 class S3Prefix:
     @property
     def identity(self) -> str:
@@ -179,9 +190,12 @@ characters, so a user directory sharing the cache root is never touched.
 
 ## Wiring it in
 
-Only the composition root changes:
+Only the composition root changes. Import your new modules at the top of
+`entrypoint.py`, then use them in `compose`:
 
-```python
+```{code-block} python
+:caption: models/myunet/src/myunet_nowcast/entrypoint.py
+
 def compose(args):
     config = Config.load(args.config)
     reader = NetcdfDecoder(NATIVE_GRID, "precipitation", "mm/h")
@@ -193,5 +207,13 @@ def compose(args):
     ...
 ```
 
-Nothing in the runtime changes. Run conformance; if it passes, the contracts
-hold.
+Nothing in the runtime changes. Run conformance from the workspace root; if it
+passes, the contracts hold:
+
+```bash
+uv run --directory models/myunet pytest
+```
+
+A worked example of all of this against a real published model, including a
+NetCDF decoder, is in
+[Porting a published model](06-porting-a-published-model.md).

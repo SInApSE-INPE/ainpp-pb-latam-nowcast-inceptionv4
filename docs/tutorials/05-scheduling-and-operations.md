@@ -3,6 +3,8 @@
 The unit of work is **one idempotent poll**. Any scheduler can drive it, which
 is why the scheduler itself is not a port.
 
+**From `models/myunet/`:**
+
 ```bash
 myunet-nowcast --config config/default.json --source ftp --scheduled \
     --output-dir outputs
@@ -47,14 +49,16 @@ train people to ignore the alerts.
 
 The OS owns scheduling, restart and logging, and a one-shot unit cannot drift.
 
+**From `models/myunet/`:**
+
 ```bash
 uv run python deploy/render_units.py
 systemd-analyze verify deploy/generated/myunet.service deploy/generated/myunet.timer
 ```
 
-The generator **only writes to `deploy/generated/`**. It does not install or
-enable anything. Regenerate after moving the project, since the units carry
-absolute paths.
+The units land in `models/myunet/deploy/generated/`, which is gitignored
+because they carry absolute host paths. The generator writes **only** there:
+it installs nothing and enables nothing. Regenerate after moving the project.
 
 ### The container loop
 
@@ -126,6 +130,8 @@ Only managed namespace directories are pruned. Files supplied through
 There is no `--backfill` mode yet. Because runs are idempotent and keyed by
 issue time, a loop works:
 
+**From `models/myunet/`:**
+
 ```bash
 for hour in $(seq 0 23); do
   myunet-nowcast --config config/archive.json --source ftp \
@@ -134,7 +140,9 @@ for hour in $(seq 0 23); do
 done
 ```
 
-An archive configuration uses an strftime template in `remote_directory`,
+An archive configuration — a second file such as
+`models/myunet/config/archive.json` — uses an strftime template in
+`remote_directory`,
 which requires an explicit `--run-time` and therefore cannot be combined with
 `--scheduled`.
 
