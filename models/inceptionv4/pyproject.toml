@@ -9,7 +9,7 @@ description = "GSMaP NOW to GeoTIFF using a direct InceptionV4 forecaster"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
-    "nowcast-runtime",
+    "nowcast-runtime>=0.3,<0.4",
     "numpy>=1.26,<3",
     "rasterio>=1.4,<2",
     "torch==2.10.0",

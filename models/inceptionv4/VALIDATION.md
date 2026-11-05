@@ -39,14 +39,28 @@ input change requires meteorological evaluation.
 
 ## Independent distribution
 
-Acquisition, processing, publication, and scheduling are embedded in
-`packages/nowcast-runtime/` and installed as the `nowcast-runtime` dependency.
-`uv lock --offline` and `uv build --offline` passed before the retention
-change. The inspected wheel contains all 11 private runtime modules and
-has no dependency on `nowcasting-runtime` or `../shared`. Importing the
-runtime from an extracted wheel outside the checkout passed. The six
-initial tests passed again. Changes needed by multiple independent models
-must be applied to each one. Earlier isolated tests used `PYTHONPATH=src` with the Xception environment because the locked CPU wheel was not in the offline cache.
+Acquisition, processing, publication, and scheduling now live in
+`packages/nowcast-runtime/` and are installed as the `nowcast-runtime`
+dependency, pinned to `>=0.3,<0.4`.
+
+**Superseded.** The findings below were recorded while the runtime was vendored
+inside this package, and three of them no longer describe the build. The wheel
+no longer contains any runtime module, it now does declare a dependency on
+`nowcast-runtime`, and a change needed by several models is applied once rather
+than to each one. They are kept because they are the evidence that motivated the
+extraction, not because they still hold.
+
+> `uv lock --offline` and `uv build --offline` passed before the retention
+> change. The inspected wheel contains all 11 private runtime modules and has no
+> dependency on `nowcasting-runtime` or `../shared`. Importing the runtime from
+> an extracted wheel outside the checkout passed. The six initial tests passed
+> again. Changes needed by multiple independent models must be applied to each
+> one. Earlier isolated tests used `PYTHONPATH=src` with the Xception
+> environment because the locked CPU wheel was not in the offline cache.
+
+Operational independence is now provided by this model's own lock file, which
+pins an exact runtime version, rather than by duplicating its source
+([ADR 0002](../../docs/adr/0002-workspace-and-model-isolation.md)).
 
 ## Temporary download retention
 

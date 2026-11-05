@@ -36,12 +36,20 @@ def sha256(path: Path) -> str:
 
 
 def bundle_files(manifest: dict) -> list[tuple[str, str]]:
-    """Accept the GSMaP and IRENE manifest formats without trusting remote metadata."""
+    """Every role the manifest declares, without trusting remote metadata.
+
+    Roles are read from the manifest rather than fixed, so a bundle with no
+    normalization statistics, or one carrying auxiliary fields, needs no change
+    here. The second branch reads a flat pre-schema bundle and exists only until
+    those are republished under schema_version 1.
+    """
     if "files" in manifest:
         if manifest.get("schema_version") != 1:
-            raise ValueError("Unsupported GSMaP artifact manifest version")
-        items = [manifest["files"][role] for role in ("checkpoint", "mean", "std")]
-        files = [(item["name"], item["sha256"]) for item in items]
+            raise ValueError("Unsupported artifact manifest version")
+        declared = manifest["files"]
+        if not isinstance(declared, dict) or not declared:
+            raise ValueError("Artifact manifest must declare a non-empty files mapping")
+        files = [(item["name"], item["sha256"]) for item in declared.values()]
     elif manifest.get("version") == 1:
         files = [(manifest["model_file"], manifest["sha256"])]
     else:

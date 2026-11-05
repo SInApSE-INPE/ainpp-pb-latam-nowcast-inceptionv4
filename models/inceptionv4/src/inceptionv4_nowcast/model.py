@@ -1,12 +1,21 @@
 """Checkpoint-compatible InceptionV4 encoder and U-Net decoder; no pretrained downloads."""
 
-from collections.abc import Mapping
+from __future__ import annotations
+
+from collections.abc import Iterator, Mapping
+from datetime import timedelta
 from pathlib import Path
 
+import numpy as np
 import timm
 import torch
 from torch import nn
 from torch.nn import functional as F
+
+from nowcast_runtime.ports import Grid, WindowSpec
+
+STEP = timedelta(hours=1)
+MIN_PIXELS = 128
 
 
 class DoubleConv(nn.Module):
@@ -42,7 +51,7 @@ class Up(nn.Module):
 class PrecipitationForecaster(nn.Module):
     def __init__(self, input_timesteps: int, output_timesteps: int, img_size: tuple[int, int]):
         super().__init__()
-        if min(input_timesteps, output_timesteps) < 1 or min(img_size) < 128:
+        if min(input_timesteps, output_timesteps) < 1 or min(img_size) < MIN_PIXELS:
             raise ValueError("Positive sequence lengths and image dimensions >= 128 are required")
         self.input_steps = input_timesteps
         self.output_steps = output_timesteps
@@ -89,7 +98,51 @@ class PrecipitationForecaster(nn.Module):
         return torch.relu(self.outc(x)).unsqueeze(2)
 
 
-def load_model(path: Path, device: torch.device, expected_shape: tuple[int, int]):
+class InceptionV4Predictor:
+    """The runtime's Predictor port over the checkpoint architecture.
+
+    Tensor creation and device placement live here rather than in the runtime,
+    so no contract mentions torch and another framework needs no new port.
+    """
+
+    def __init__(self, module: PrecipitationForecaster, grid: Grid, device: torch.device):
+        self.module = module
+        self.grid = grid
+        self.device = device
+        self.step = STEP
+        self.window = WindowSpec.uniform(STEP, module.input_steps)
+        self.output_steps = module.output_steps
+
+    def leads(self, inputs: np.ndarray, steps: int) -> Iterator[np.ndarray]:
+        """One forward pass, then yield each lead as (members, variables, rows, columns)."""
+        if not 1 <= steps <= self.output_steps:
+            raise ValueError(f"steps must be between 1 and the horizon {self.output_steps}")
+        if inputs.ndim != 4 or inputs.shape[1] != 1:
+            raise ValueError("InceptionV4 consumes one variable per timestep")
+        tensor = torch.from_numpy(np.ascontiguousarray(inputs[:, 0])).unsqueeze(0)
+        self.module.eval()
+        with torch.inference_mode():
+            prediction = self.module(tensor.to(self.device))
+            expected = (1, self.output_steps, 1, *self.module.img_size)
+            if tuple(prediction.shape) != expected:
+                raise ValueError("Invalid InceptionV4 output shape")
+            if not torch.isfinite(prediction).all():
+                raise ValueError("Model produced non-finite predictions")
+            fields = prediction[0].cpu().numpy()
+        for lead in range(steps):
+            # (variables, rows, columns) gains a single-member leading axis.
+            yield fields[lead][np.newaxis]
+
+
+def resolve_device(requested: str) -> torch.device:
+    if requested == "cuda" and not torch.cuda.is_available():
+        raise ValueError("CUDA requested but unavailable")
+    if requested == "auto":
+        requested = "cuda" if torch.cuda.is_available() else "cpu"
+    return torch.device(requested)
+
+
+def load_module(path: Path, shape: tuple[int, int]) -> PrecipitationForecaster:
     checkpoint = torch.load(path, map_location="cpu", weights_only=True, mmap=True)
     if not isinstance(checkpoint, Mapping):
         raise ValueError("Checkpoint must contain a state dictionary")
@@ -105,21 +158,24 @@ def load_model(path: Path, device: torch.device, expected_shape: tuple[int, int]
         output_steps = state["outc.weight"].shape[0]
     except (KeyError, AttributeError, IndexError) as exc:
         raise ValueError("Not a supported InceptionV4 checkpoint") from exc
-    model = PrecipitationForecaster(input_steps, output_steps, expected_shape)
-    model.load_state_dict(state, strict=True)
-    return model.to(device).eval()
+    module = PrecipitationForecaster(input_steps, output_steps, shape)
+    module.load_state_dict(state, strict=True)
+    # Inference only: training mode would make BatchNorm use batch statistics.
+    return module.eval()
 
 
-def forecast_steps(model: PrecipitationForecaster, inputs: torch.Tensor, steps: int):
-    """One forward pass, then yield individual normalized leads in chronological order."""
-    if not 1 <= steps <= model.output_steps:
-        raise ValueError(f"steps must be between 1 and native horizon {model.output_steps}")
-    model.eval()
-    with torch.inference_mode():
-        prediction = model(inputs)
-        if prediction.shape != (inputs.shape[0], model.output_steps, 1, *model.img_size):
-            raise ValueError("Invalid InceptionV4 output shape")
-        if not torch.isfinite(prediction).all():
-            raise ValueError("Model produced non-finite predictions")
-    for lead in range(steps):
-        yield prediction[:, lead]
+def load_model(artifacts: Mapping[str, Path], device: str, grid: Grid) -> InceptionV4Predictor:
+    """Build the predictor the runtime asked for, on the grid it will run."""
+    resolved = resolve_device(device)
+    module = load_module(artifacts["checkpoint"], grid.shape)
+    return InceptionV4Predictor(module.to(resolved), grid, resolved)
+
+
+def library_versions() -> dict[str, str]:
+    import torchvision
+
+    return {
+        "timm": timm.__version__,
+        "torch": torch.__version__,
+        "torchvision": torchvision.__version__,
+    }

@@ -2,8 +2,12 @@
 #   docker build -f models/inceptionv4/Dockerfile .
 FROM python:3.12-slim-bookworm AS builder
 
+# A build cache mount, not UV_NO_CACHE: any change under packages/ invalidates
+# the sync layer, and re-downloading a 180 MiB wheel each time is both slow and
+# a reliable way to hit a transient transfer failure. The cache lives in the
+# builder stage only, so the published image is unaffected.
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
-    UV_NO_CACHE=1
+    UV_CACHE_DIR=/opt/uv-cache
 WORKDIR /build
 RUN python -m pip install --no-cache-dir uv==0.11.32
 # The workspace root carries the torch index that the runtime member resolves
@@ -13,7 +17,8 @@ COPY packages/nowcast-runtime ./packages/nowcast-runtime
 COPY models/inceptionv4/pyproject.toml models/inceptionv4/uv.lock models/inceptionv4/README.md \
      ./models/inceptionv4/
 COPY models/inceptionv4/src ./models/inceptionv4/src
-RUN uv sync --locked --no-dev --no-editable \
+RUN --mount=type=cache,target=/opt/uv-cache \
+    uv sync --locked --no-dev --no-editable \
       --project models/inceptionv4 --python /usr/local/bin/python
 
 FROM python:3.12-slim-bookworm

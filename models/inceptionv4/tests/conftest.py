@@ -7,15 +7,20 @@ import numpy as np
 import pytest
 import torch
 
-from inceptionv4_nowcast.model import load_model
+from inceptionv4_nowcast.model import load_module
 
 PROJECT = Path(__file__).resolve().parents[1]
+# Indices of the test patch inside the stored GSMaP array, which the decoder
+# rolls by half the globe: stored column 2400 becomes grid column 600, the
+# offset of west=-120 on the native grid.
+ROW0, COLUMN0 = 270, 2400
+SIZE = 128
 
 
 @pytest.fixture(scope="session")
-def model():
+def module():
     torch.set_num_threads(2)
-    return load_model(PROJECT / "artifacts/v1/inceptionv4.pth", torch.device("cpu"), (128, 128))
+    return load_module(PROJECT / "artifacts/v1/inceptionv4.pth", (SIZE, SIZE))
 
 
 @pytest.fixture
@@ -33,14 +38,16 @@ def case(tmp_path):
     for index in range(12):
         stamp = end - timedelta(hours=11 - index)
         rain = np.zeros((1200, 3600), dtype="<f4")
-        patch = np.arange(128, dtype=np.float32)[:, None] / 128 + index / 20
-        rain[270:398, 2400:2528] = patch
-        rain[270, 2400] = -99  # User's negative-to-zero rule, never NoData.
-        frames.append(np.maximum(rain[270:398, 2400:2528], 0).copy())
+        patch = np.arange(SIZE, dtype=np.float32)[:, None] / SIZE + index / 20
+        rain[ROW0 : ROW0 + SIZE, COLUMN0 : COLUMN0 + SIZE] = patch
+        rain[ROW0, COLUMN0] = -99  # The negative-to-zero rule, never NoData.
+        frames.append(
+            np.maximum(rain[ROW0 : ROW0 + SIZE, COLUMN0 : COLUMN0 + SIZE], 0).copy()
+        )
         with gzip.open(
             inputs / f"gsmap_now.{stamp:%Y%m%d.%H00}.dat.gz", "wb", compresslevel=1
-        ) as f:
-            f.write(rain.tobytes())
+        ) as handle:
+            handle.write(rain.tobytes())
     return {
         "config": config,
         "inputs": inputs,

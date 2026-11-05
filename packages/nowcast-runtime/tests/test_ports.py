@@ -227,7 +227,7 @@ def test_predictor_protocol_recognizes_a_minimal_implementation():
         output_steps = 6
         grid = LATAM
 
-        def leads(self, inputs, steps, run_time):
+        def leads(self, inputs, steps):
             yield from ()
 
     assert isinstance(Direct(), Predictor)

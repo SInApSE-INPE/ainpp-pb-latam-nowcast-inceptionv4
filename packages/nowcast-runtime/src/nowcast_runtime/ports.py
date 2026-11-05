@@ -233,6 +233,14 @@ class Source(Protocol):
     def identity(self) -> str:
         """Stable description for the run manifest. Must not carry credentials."""
 
+    @property
+    def live(self) -> bool:
+        """True when this source keeps publishing, so staleness is meaningful.
+
+        A directory of supplied inputs is not live: rejecting it for being old
+        would make reprocessing an archive impossible.
+        """
+
     def candidates(
         self, window: WindowSpec, run_time: datetime | None
     ) -> Sequence[tuple[str, str]]:
@@ -340,8 +348,13 @@ class Predictor(Protocol):
     def grid(self) -> Grid:
         """The grid this instance was loaded for."""
 
-    def leads(self, inputs: np.ndarray, steps: int, run_time: datetime) -> Iterator[Prediction]:
-        """Yield leads in chronological order.
+    def leads(self, inputs: np.ndarray, steps: int) -> Iterator[np.ndarray]:
+        """Yield steps fields of shape (members, variables, height, width), in order.
+
+        Inputs arrive as (time, variables, height, width) in model space. A model
+        yields bare arrays: lead numbering, valid times and the mask inherited
+        from the inputs are the runtime's job, so a model author writes less and
+        cannot get them inconsistent.
 
         An iterator, so a direct model can run a single forward pass while a
         recurrent or autoregressive model advances its own state per lead.

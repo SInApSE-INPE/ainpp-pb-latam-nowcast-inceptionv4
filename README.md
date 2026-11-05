@@ -24,22 +24,34 @@ members**: each keeps its own `uv.lock`, so a CPU-only deployment and a CUDA one
 can coexist without either dictating the other's torch build
 ([ADR 0002](docs/adr/0002-workspace-and-model-isolation.md)).
 
-## Current state
+## How it fits together
 
-The runtime has been extracted from the InceptionV4 package and is consumed as a
-real dependency, so a fix lands in one place.
+`nowcast_runtime.ports` holds the contracts. Every run follows one spine, and
+each bracketed stage may be empty:
 
-`nowcast_runtime.ports` now defines the contracts a deployment composes: five
-ports, the value objects they exchange, and the plugin declaration a model
-supplies. See [ADR 0003](docs/adr/0003-ports-and-their-granularity.md) for which
-seams are justified and why there are not more of them.
+```text
+Source -> Decoder -> [Preprocess] -> Transform.forward -> Predictor
+       -> Transform.inverse -> [Postprocess] -> Sink
+```
 
-**The pipeline has not been migrated onto those ports yet.** Acquisition,
-decoding, normalization and export still read GSMaP binaries from JAXA FTP
-through a log1p/z-score transform into single-band GeoTIFF, written directly
-rather than through the contracts. Until that migration lands, read `ports.py`
-as the target and the remaining modules as an implementation that does not yet
-satisfy it.
+The runtime owns the sequence and the operational guarantees that go with it:
+nothing partial is ever published, a complete run is never overwritten, a
+scheduled poll is idempotent and locked, and every run carries a manifest
+recording the artifacts, stages, versions and checksums that produced it.
+
+`nowcast_runtime.builtin` supplies adapters general enough to be parameterized
+rather than rewritten. The GSMaP binary format this repository started with is
+one configuration of `RawBinaryDecoder`, not a module of its own, which is the
+standard the other built-ins are held to.
+
+Composition lives in a model's own entrypoint, so the runtime never imports an
+adapter and an adapter never imports the pipeline.
+
+Read the decisions in order: [0001](docs/adr/0001-pipeline-shape-scope.md) fixes
+what shape of forecast is in scope, [0003](docs/adr/0003-ports-and-their-granularity.md)
+why there are these ports and not more, and
+[0004](docs/adr/0004-optional-stages-and-built-in-adapters.md) why every stage is
+optional.
 
 ## Checks
 
@@ -62,12 +74,40 @@ and model, so lint rules cannot drift between them.
 
 ## Adding a model
 
-What a model will supply is a `ModelPlugin`: its name and version, the artifact
-roles its bundle contains, the runtime range it needs, and callables that build
-its `Predictor` and `Transform`. That declaration lives in `ports.py`.
+A model declares a `ModelPlugin`. Only six fields are required:
 
-What a model supplies *today*, until the migration lands, is the narrower
-`Backend` in `backend.py` — a name, a version, a checkpoint loader and a
-function yielding normalized leads — plus its configuration and a SHA-256
-artifact manifest. `models/inceptionv4/src/inceptionv4_nowcast/entrypoint.py` is
-the whole wiring, and is worth reading first.
+```python
+PLUGIN = ModelPlugin(
+    name="MyUNet",
+    slug="myunet",
+    version="0.1.0",
+    bundle_roles=("checkpoint",),   # declared, not fixed: no mean/std needed
+    requires_runtime=">=0.3,<0.4",
+    load=load_model,                # rebuild the network, load the weights
+)
+```
+
+`transform`, `preprocess` and `postprocess` are optional. A model that consumes
+physical units and needs no stages declares none, and the runtime applies
+identity: the absence of processing is the default path, not a special case.
+
+Three things are always yours to supply, and the runtime will not invent them:
+
+1. **The architecture code and its loader.** A checkpoint is weights; something
+   has to rebuild the network. The runtime loads and runs, it never infers
+   topology.
+2. **The configuration** naming the domain, the source, the format and the stages.
+3. **The artifact bundle**, with a SHA-256 manifest declaring the roles the
+   plugin named.
+
+Everything else should be composition. When your source, format and transform
+are all covered by built-ins, the adapter code you write is none.
+
+What the runtime checks is the contract: units, grid alignment, window spacing,
+output shape, bundle checksums, and what a bundle declares against what a
+deployment configured. What it cannot check is scientific validity — whether a
+model trained on one product has skill on another stays the job of that model's
+own validation record.
+
+`models/inceptionv4` is the worked example; its `entrypoint.py` is the whole
+composition and is worth reading first.
