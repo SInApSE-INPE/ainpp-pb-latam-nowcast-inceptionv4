@@ -10,7 +10,10 @@ __pycache__/
 .coverage
 .coverage.*
 htmlcov/
-reference/
+# Scoped to the models: an unanchored 'reference/' also matches docs/reference/,
+# which silently excluded documentation that built fine locally and was never
+# published. Anchor any pattern whose name could recur elsewhere.
+models/*/reference/
 
 # Generated packages
 build/
