@@ -1,7 +1,7 @@
 .venv/
 __pycache__/
-outputs/
-data/
+outputs*/
+data*/
 *.pth
 *.pt
 *.ckpt

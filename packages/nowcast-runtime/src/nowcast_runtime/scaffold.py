@@ -524,8 +524,9 @@ COMPOSE = Template('''services:
 
 GITIGNORE = """.venv/
 __pycache__/
-outputs/
-data/
+# Trailing glob: a run written to outputs-real/ or data/real/ is still output.
+outputs*/
+data*/
 *.pth
 *.pt
 *.ckpt

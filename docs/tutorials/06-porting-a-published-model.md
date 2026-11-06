@@ -29,10 +29,19 @@ runtime** and **two to the conformance suite**. All three are described below,
 because a platform that only reports its successes is not worth trusting.
 ```
 
-![Four ensemble members at +15 min and the ensemble mean through the hour, from real IRENE weights](../_static/irene-ensemble.png)
+![Observed Italian radar against the IRENE ensemble mean at three lead times](../_static/irene-ensemble.png)
 
-Four members, visibly different, and the cell decaying over the hour. The white
-strip along the top is the radar coverage mask carried through from the inputs.
+Real Italian radar, 29 August 2025. The top row is what the radar recorded;
+the bottom row is the ensemble mean forecast for the same moments. Detail
+decays with lead time, which is what a nowcaster does. The white region in
+the +30 min observation is a coverage dropout in that scan, carried through
+as NoData rather than invented.
+
+```{warning}
+One case is an **illustration, not a verification**. No score is computed
+here and none should be inferred. Whether IRENE has skill over Italy is a
+question for its authors and its own validation record.
+```
 
 ## 1. Read the model before writing anything
 
@@ -234,7 +243,8 @@ constraint without padding.
 
 ## 8. Run it
 
-**From the workspace root:**
+The project generates synthetic scans for a smoke test, which is what the
+conformance suite also uses. **From the workspace root:**
 
 ```bash
 uv run --directory models/irene python tools/make_sample_inputs.py \
@@ -243,6 +253,35 @@ uv run --directory models/irene irene-nowcast \
     --config config/default.json --source local \
     --input-dir data/raw --output-dir outputs --device cpu
 ```
+
+### On real radar
+
+The figure above is not from those. The repository's published sample,
+`examples/sample_data.nc`, holds 54 real scans of 29 August 2025, and the
+run shown used the six wettest consecutive ones:
+
+```text
+  dpc_sri.202508290015.nc  nan  1.5%  wet  10667  max  90.19 mm/h
+  dpc_sri.202508290020.nc  nan  1.5%  wet  11099  max  71.06 mm/h
+  dpc_sri.202508290025.nc  nan  1.5%  wet  10675  max  66.56 mm/h
+  dpc_sri.202508290030.nc  nan  1.5%  wet  10305  max  73.00 mm/h
+  dpc_sri.202508290035.nc  nan  1.5%  wet  11004  max  78.12 mm/h
+  dpc_sri.202508290040.nc  nan  1.5%  wet  11165  max  74.19 mm/h
+```
+
+What came out, against 11,165 wet pixels observed at the run time with a
+peak of 74.19 mm/h:
+
+```text
+  + 5 min : wet  22853  max  54.03  mean 2.143 mm/h
+  +15 min : wet  15549  max  62.23  mean 3.211 mm/h
+  +30 min : wet  15816  max  33.39  mean 2.586 mm/h
+  +60 min : wet  15333  max  23.12  mean 1.767 mm/h
+```
+
+Structure persists and intensity decays, which is the expected behaviour.
+Ensemble spread at +30 min is 0.35 mm/h against 0.03 on the synthetic
+input: real weather gives the decoder more to be uncertain about.
 
 ```text
 INFO Model ready on cpu; 6 input steps
@@ -301,22 +340,25 @@ worked the first time they met a model that actually used them.
 ## What this does not show
 
 ```{warning}
-**No skill is demonstrated here.** The inputs are a synthetic moving blob. The
-forecast decaying to nothing over the hour is what that input deserves and says
-nothing about the model's behaviour on real radar.
+**No skill is demonstrated here.** One case, no scores, no baseline. The
+forecast looks reasonable beside the observation, and that is an anecdote.
 
-The CRS is asserted, not verified. The one-file-per-scan assumption is not
-confirmed against the operational DPC feed. Whether IRENE is useful over Italy
-is a question for its authors and its own validation record, and nothing in
-this platform will answer it.
+The CRS is asserted, not verified. Whether IRENE is useful over Italy is a
+question for its authors and its own validation record, and nothing in this
+platform will answer it.
 ```
 
-### A limitation the port did surface
+### A limitation the port actually hit
 
 The published sample is a **datacube**: 54 timesteps in one NetCDF. The
 contracts assume **one observation per object** — `observed_at` maps one file
 name to one time, and `fetch` returns a `Path` with nowhere to carry an index.
 
-If the operational feed is one file per five-minute scan, as the port assumes,
-this never matters. If it is a datacube, the contracts cannot express it today,
-and that would be the first genuine port this platform is missing.
+This was not hypothetical. Running on the real sample required splitting the
+cube into per-scan files first, outside the pipeline, because there is no way
+to express it inside.
+
+If the operational DPC feed publishes one file per five-minute scan, as this
+port assumes, it never matters. If it publishes cubes, this is the first
+genuinely missing port, and it would need either a source that explodes a cube
+into virtual observations or a `fetch` that can carry an index.
